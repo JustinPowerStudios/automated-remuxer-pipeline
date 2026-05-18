@@ -1,0 +1,18 @@
+@echo off
+set "SCRIPT_DIR=%~dp0"
+call "%SCRIPT_DIR%LoadConfig.bat"
+set "FLAG=%TXT%\force_scan.flag"
+
+if exist "%FLAG%" (
+    del "%FLAG%" >nul 2>&1
+    echo =========================
+    echo   PScan Force Flag Removed
+    echo =========================
+) else (
+    type nul > "%FLAG%"
+    echo =========================
+    echo   PScan Force Flag Set
+    echo =========================
+)
+
+timeout /t 2 >nul

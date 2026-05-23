@@ -175,13 +175,13 @@ function Send-DiscordLog {
         $Color = $ColorMap["INFO"]
     }
 
-    # Add emoji prefix based on level
+    # Add text prefix based on level
     $Emoji = switch($Level) {
-        "ERROR"   { "❌" }
-        "WARNING" { "⚠️" }
-        "DEBUG"   { "🐛" }
-        "SUCCESS" { "✅" }
-        default   { "ℹ️" }
+        "ERROR"   { "ERROR" }
+        "WARNING" { "WARNING" }
+        "DEBUG"   { "DEBUG" }
+        "SUCCESS" { "SUCCESS" }
+        default   { "INFO" }
     }
 
     # Truncate message if too long (Discord limit)
@@ -436,7 +436,23 @@ function Log {
     # -------------------------
     # DISCORD NOTIFICATION
     # -------------------------
-    if($SendToDiscord){
+    # Check if this log level should be sent to Discord
+    $sendToDiscord = $false
+    
+    if ($SendToDiscord) {
+        $sendToDiscord = $true
+    }
+    else {
+        # Check config settings for this level
+        if ($null -ne $script:Config.Notifications.DiscordLogLevels) {
+            $levelSetting = $script:Config.Notifications.DiscordLogLevels.$level
+            if ($null -ne $levelSetting) {
+                $sendToDiscord = [bool]$levelSetting
+            }
+        }
+    }
+    
+    if ($sendToDiscord) {
         Send-DiscordLog -Tag $tag -Message $msg -Level $level
     }
 }

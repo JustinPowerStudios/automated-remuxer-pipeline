@@ -182,7 +182,7 @@ function Test-DiscordWebhook {
 
     try {
         $testPayload = @{
-            content = "🔗 Discord webhook connection test - Configuration complete!"
+            content = "Discord webhook connection test - Configuration complete!"
         } | ConvertTo-Json
 
         $response = Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $testPayload -ContentType "application/json" -ErrorAction Stop
@@ -275,12 +275,12 @@ function Send-PipelineStartNotification {
         "Input Folder"  = $Config.Paths.InputFolder
         "Output Folder" = $Config.Paths.OutputFolder
         "Temp Folder"   = $Config.Paths.TempFolder
-        "Media Scanner" = if ($Config.MediaScanner.Enabled) { "✅ Enabled" } else { "❌ Disabled" }
-        "Idle Shutdown" = if ($Config.IdleShutdown.Enabled) { "✅ Enabled ($($Config.IdleShutdown.IdleMinute) min)" } else { "❌ Disabled" }
+        "Media Scanner" = if ($Config.MediaScanner.Enabled) { "Enabled" } else { "Disabled" }
+        "Idle Shutdown" = if ($Config.IdleShutdown.Enabled) { "Enabled ($($Config.IdleShutdown.IdleMinute) min)" } else { "Disabled" }
     }
 
     Send-DiscordNotification -WebhookUrl $WebhookUrl `
-        -Title "🚀 Video Pipeline Started" `
+        -Title "Video Pipeline Started" `
         -Description "The video remuxing pipeline has been initiated." `
         -Status "running" `
         -Fields $fields
@@ -297,7 +297,7 @@ function Send-PipelineCompleteNotification {
     )
 
     $status = if ($Success) { "success" } else { "error" }
-    $emoji = if ($Success) { "✅" } else { "❌" }
+    $statusIcon = if ($Success) { "Success" } else { "Failure" }
     $description = if ($Success) { "Job completed successfully!" } else { "Job failed - check logs for details." }
 
     $fields = @{
@@ -308,7 +308,7 @@ function Send-PipelineCompleteNotification {
     }
 
     Send-DiscordNotification -WebhookUrl $WebhookUrl `
-        -Title "$emoji Job Complete: $JobName" `
+        -Title "Job Complete: $JobName" `
         -Description $description `
         -Status $status `
         -Fields $fields
@@ -333,7 +333,7 @@ function Send-PipelineErrorNotification {
     }
 
     Send-DiscordNotification -WebhookUrl $WebhookUrl `
-        -Title "⚠️ Pipeline Error: $ErrorTitle" `
+        -Title "Pipeline Error: $ErrorTitle" `
         -Description "An error occurred in the video pipeline." `
         -Status "error" `
         -Fields $fields
@@ -535,6 +535,14 @@ function Start-SetupWizard {
     $EnableDiscordWebhook = Read-YesNo "Enable Discord webhook notifications?" $false
 
     $DiscordWebhook = ""
+    $DiscordLogLevels = @{
+        ERROR   = $false
+        WARNING = $false
+        INFO    = $false
+        DEBUG   = $false
+        SUCCESS = $false
+        TRACE   = $false
+    }
 
     if ($EnableDiscordWebhook) {
         do {
@@ -543,14 +551,25 @@ function Start-SetupWizard {
             Write-Host "Testing Discord webhook connection..." -ForegroundColor Cyan
             
             if (Test-DiscordWebhook $DiscordWebhook) {
-                Write-Host "✓ Discord webhook validated successfully!" -ForegroundColor Green
+                Write-Host "Discord webhook validated successfully!" -ForegroundColor Green
             }
             else {
-                Write-Host "✗ Invalid Discord webhook URL or connection failed." -ForegroundColor Red
+                Write-Host "Invalid Discord webhook URL or connection failed." -ForegroundColor Red
                 Write-Host "Please check your webhook URL and try again." -ForegroundColor Yellow
                 $DiscordWebhook = ""
             }
         } while ([string]::IsNullOrWhiteSpace($DiscordWebhook))
+        
+        # Prompt for each log level
+        Write-Host ""
+        Show-Section "Discord Log Levels"
+        
+        $DiscordLogLevels["ERROR"] = Read-YesNo "Send ERROR logs to Discord?" $true
+        $DiscordLogLevels["WARNING"] = Read-YesNo "Send WARNING logs to Discord?" $true
+        $DiscordLogLevels["INFO"] = Read-YesNo "Send INFO logs to Discord?" $false
+        $DiscordLogLevels["DEBUG"] = Read-YesNo "Send DEBUG logs to Discord?" $false
+        $DiscordLogLevels["SUCCESS"] = Read-YesNo "Send SUCCESS logs to Discord?" $true
+        $DiscordLogLevels["TRACE"] = Read-YesNo "Send TRACE logs to Discord?" $false
     }
 
     # -------------------------
@@ -586,6 +605,7 @@ function Start-SetupWizard {
         Notifications = @{
             DiscordWebhookEnabled = $EnableDiscordWebhook
             DiscordWebhook        = $DiscordWebhook
+            DiscordLogLevels      = $DiscordLogLevels
         }
 
         General = @{
@@ -662,6 +682,16 @@ function Show-CurrentSettings {
 
     Write-Host "DISCORD NOTIFICATIONS ENABLED:" -ForegroundColor Cyan
     Write-Host "  $($Config.Notifications.DiscordWebhookEnabled)"
+
+    if ($Config.Notifications.DiscordWebhookEnabled -and $null -ne $Config.Notifications.DiscordLogLevels) {
+        Write-Host ""
+        Write-Host "DISCORD LOG LEVELS:" -ForegroundColor Cyan
+        foreach ($level in @("ERROR", "WARNING", "INFO", "DEBUG", "SUCCESS", "TRACE")) {
+            $enabled = $Config.Notifications.DiscordLogLevels.$level
+            $status = if ($enabled) { "Enabled" } else { "Disabled" }
+            Write-Host "  $level : $status"
+        }
+    }
 }
 
 # =========================
@@ -756,18 +786,18 @@ function Show-MainMenu {
                 if ($Config.Notifications.DiscordWebhookEnabled) {
                     Write-Host "Testing Discord webhook..." -ForegroundColor Cyan
                     if (Test-DiscordWebhook $Config.Notifications.DiscordWebhook) {
-                        Write-Host "✓ Discord webhook test successful!" -ForegroundColor Green
+                        Write-Host "Discord webhook test successful!" -ForegroundColor Green
                         Write-Host ""
                         Write-Host "Sending test notification..." -ForegroundColor Cyan
                         Send-DiscordNotification -WebhookUrl $Config.Notifications.DiscordWebhook `
-                            -Title "🧪 Pipeline Test Notification" `
+                            -Title "Pipeline Test Notification" `
                             -Description "Discord webhook integration is working correctly!" `
                             -Status "success" `
-                            -Fields @{"Test Status" = "✅ Passed"; "Timestamp" = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
-                        Write-Host "✓ Test notification sent!" -ForegroundColor Green
+                            -Fields @{"Test Status" = "Passed"; "Timestamp" = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
+                        Write-Host "Test notification sent!" -ForegroundColor Green
                     }
                     else {
-                        Write-Host "✗ Discord webhook test failed!" -ForegroundColor Red
+                        Write-Host "Discord webhook test failed!" -ForegroundColor Red
                     }
                 }
                 else {

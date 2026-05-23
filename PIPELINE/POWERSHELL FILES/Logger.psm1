@@ -125,6 +125,7 @@ $Global:RepairQueue =
 
 $Global:RepairArchive =
     Join-Path $Global:Base $ConfigPaths.RepairArchive
+
 function Get-PipelineLogPath {
     return $Global:LogPath
 }
@@ -135,6 +136,81 @@ function Get-DebugLogPath {
 
 function Get-FFmpegLogPath {
     return $Global:FFmpegLog
+}
+
+# =========================================================
+# DISCORD WEBHOOK FUNCTIONS
+# =========================================================
+
+function Send-DiscordLog {
+    param(
+        [string]$Tag,
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+
+    # Check if Discord notifications are enabled
+    if ($null -eq $script:Config.Notifications -or 
+        -not $script:Config.Notifications.DiscordWebhookEnabled) {
+        return
+    }
+
+    $WebhookUrl = $script:Config.Notifications.DiscordWebhook
+    if ([string]::IsNullOrWhiteSpace($WebhookUrl)) {
+        return
+    }
+
+    # Map log levels to Discord embed colors
+    $ColorMap = @{
+        "ERROR"   = 15158332   # Red
+        "WARNING" = 16776960   # Yellow
+        "DEBUG"   = 9807270    # Gray
+        "INFO"    = 3447003    # Blue
+        "SUCCESS" = 3066993    # Green
+        "TRACE"   = 5793266    # Dark Gray
+    }
+
+    $Color = $ColorMap[$Level]
+    if ($null -eq $Color) {
+        $Color = $ColorMap["INFO"]
+    }
+
+    # Add emoji prefix based on level
+    $Emoji = switch($Level) {
+        "ERROR"   { "❌" }
+        "WARNING" { "⚠️" }
+        "DEBUG"   { "🐛" }
+        "SUCCESS" { "✅" }
+        default   { "ℹ️" }
+    }
+
+    # Truncate message if too long (Discord limit)
+    $TruncatedMsg = if ($Message.Length -gt 1024) { 
+        $Message.Substring(0, 1021) + "..."
+    } else { 
+        $Message 
+    }
+
+    try {
+        $embed = @{
+            title       = "$Emoji $Tag - $Level"
+            description = $TruncatedMsg
+            color       = $Color
+            footer      = @{
+                text = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+            }
+            timestamp   = (Get-Date -Format o)
+        }
+
+        $payload = @{
+            embeds = @($embed)
+        } | ConvertTo-Json -Depth 10
+
+        Invoke-RestMethod -Uri $WebhookUrl -Method Post -Body $payload -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
+    }
+    catch {
+        # Silently fail - don't want logging errors to break the pipeline
+    }
 }
 
 # -------------------------
@@ -264,7 +340,8 @@ function Log {
     param(
         [string]$tag,
         [string]$msg,
-        [string]$level = "INFO"
+        [string]$level = "INFO",
+        [bool]$SendToDiscord = $false
     )
 
     Initialize-Logger
@@ -355,6 +432,13 @@ function Log {
         }
         catch {}
     }
+
+    # -------------------------
+    # DISCORD NOTIFICATION
+    # -------------------------
+    if($SendToDiscord){
+        Send-DiscordLog -Tag $tag -Message $msg -Level $level
+    }
 }
 
 # -------------------------
@@ -371,6 +455,7 @@ trap {
 
 Export-ModuleMember -Function @(
     "Log",
+    "Send-DiscordLog",
     "Get-VerboseEnabled",
     "Get-PipelineLogPath",
     "Get-DebugLogPath",
